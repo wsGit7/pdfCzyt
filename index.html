@@ -1,181 +1,339 @@
-<!DOCTYPE html>
-<html lang="en">
+<!doctype html>
+<html lang="pl">
 <head>
-  <!-- Declare UTF-8 for the document -->
-  <meta charset="utf-8">
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>PDF Speed Reader</title>
   <style>
-    body {
-      font-family: sans-serif;
-      padding: 20px;
-      max-width: 800px;
-      margin: auto;
+    :root{
+      --bg:#f7f9fb;--card:#fff;--muted:#55647a;--accent:#0b5dff;
+      --display-bg:#fff;--display-color:#08203a;
     }
-    #controls {
-      margin-bottom: 20px;
+    body{font-family:Inter,ui-sans-serif,system-ui,Arial,sans-serif;background:var(--bg);margin:0;padding:20px;display:flex;justify-content:center;color:var(--display-color)}
+    .wrap{max-width:900px;width:100%}
+    header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+    h1{font-size:18px;margin:0;color:var(--display-color)}
+    .card{background:var(--card);padding:14px;border-radius:10px;box-shadow:0 6px 18px rgba(7,22,45,.06)}
+    #controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+    #controls input[type="file"]{padding:4px}
+    #controls label{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:6px}
+    #controls input[type="number"]{width:5.2rem;padding:6px;border-radius:6px;border:1px solid #dbe8ff}
+    button{background:var(--accent);color:#fff;border:0;padding:8px 10px;border-radius:8px;cursor:pointer}
+    button[disabled]{opacity:.45;cursor:default}
+    #info{margin:12px 0;font-size:14px;color:var(--muted);display:flex;justify-content:space-between;align-items:center;gap:10px}
+    #display{font-size:24px;line-height:1.45;min-height:5.4em;padding:14px;border-radius:8px;border:1px solid #e0e7ff;background:var(--display-bg);color:var(--display-color)}
+    .progress{height:8px;background:#e9eef8;border-radius:6px;overflow:hidden;margin-top:10px}
+    .progress > i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),#3db0ff);width:0%}
+    .meta{font-size:13px;color:var(--muted);margin-top:8px}
+    .controls-right{display:flex;gap:8px;align-items:center}
+    .small-btn{background:#fff;color:var(--accent);border:1px solid #dbe8ff;padding:6px 8px;border-radius:8px}
+    .loading{font-size:13px;color:var(--muted)}
+    .dark {
+      --bg:#000;
+      --card:#0b0b0b;
+      --muted:#cfd6e6;
+      --accent:#4ea8ff;
+      --display-bg:#000;
+      --display-color:#ffffff;
     }
-    #info {
-      font-size: 16px;
-      margin-bottom: 10px;
-      font-weight: bold;
-    }
-    #display {
-      font-size: 24px;
-      line-height: 1.4;
-      min-height: 4em;
-      border: 1px solid #ccc;
-      padding: 1em;
-      border-radius: 4px;
-      background: #f9f9f9;
-    }
-    button {
-      margin-left: 5px;
-    }
+    @media (max-width:640px){#display{font-size:20px}}
   </style>
 </head>
 <body>
-  <h1>PDF Speed Reader</h1>
+  <div class="wrap" id="root">
+    <header>
+      <h1>PDF Speed Reader</h1>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="loading" id="loadingHint">Ready</div>
+        <button id="themeToggle" title="Przełącz tryb ciemny/jasny" style="background:#222;color:#fff;padding:6px 8px;border-radius:8px;border:0;cursor:pointer">Ciemny tryb</button>
+      </div>
+    </header>
 
-  <div id="controls">
-    <input type="file" id="fileInput" accept="application/pdf"/>
-    <label>
-      Seconds per 100 characters:
-      <input type="number" id="speedInput" value="2" step="0.1" min="0.1"/>
-    </label>
-    <button id="startBtn">Start</button>
-    <button id="pauseBtn" disabled>Pause</button>
-    <button id="resumeBtn" disabled>Resume</button>
+    <div class="card" role="main" aria-live="polite">
+      <div id="controls">
+        <input type="file" id="fileInput" accept="application/pdf" aria-label="Wybierz plik PDF" />
+        <label>Start sentence # <input type="number" id="startIndexInput" value="1" min="1" /></label>
+        <label>Sec per 100 chars <input type="number" id="speedInput" value="2" step="0.1" min="0.1" /></label>
+
+        <div class="controls-right" style="margin-left:auto">
+          <button id="startBtn">Start</button>
+          <button id="pauseBtn" disabled>Pause</button>
+          <button id="resumeBtn" disabled>Resume</button>
+          <button id="stopBtn" class="small-btn" disabled>Stop</button>
+        </div>
+      </div>
+
+      <div id="info" aria-hidden="false">
+        <div id="counts">Sentences: 0 | Current: 0</div>
+        <div id="timeEst" class="meta">Progress: 0% | ETA: 0s</div>
+      </div>
+
+      <div id="display">Załaduj PDF i kliknij Start.</div>
+      <div class="progress" aria-hidden="true"><i id="progBar"></i></div>
+      <div class="meta">Skróty: Space — pauza/wznów; ← — back; → — forward; ↑/↓ — zwiększ/zmniejsz szybkość</div>
+    </div>
   </div>
 
-  <div id="info">Sentences: 0 | Current: 0 | Progress: 0%</div>
-  <div id="display">Load a PDF and click “Start” to begin.</div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js';
 
-  <!-- PDF.js library, with explicit charset -->
-  <script charset="utf-8" src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
-  <script charset="utf-8">
-    // Configure PDF.js worker
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js';
-
-    const fileInput  = document.getElementById('fileInput');
+    const root = document.getElementById('root');
+    const fileInput = document.getElementById('fileInput');
+    const startIndexInput = document.getElementById('startIndexInput');
     const speedInput = document.getElementById('speedInput');
-    const startBtn   = document.getElementById('startBtn');
-    const pauseBtn   = document.getElementById('pauseBtn');
-    const resumeBtn  = document.getElementById('resumeBtn');
-    const infoEl     = document.getElementById('info');
-    const display    = document.getElementById('display');
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resumeBtn = document.getElementById('resumeBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const infoEl = document.getElementById('counts');
+    const timeEstEl = document.getElementById('timeEst');
+    const display = document.getElementById('display');
+    const progBar = document.getElementById('progBar');
+    const loadingHint = document.getElementById('loadingHint');
+    const themeToggle = document.getElementById('themeToggle');
 
     let sentences = [];
-    let index     = 0;
-    let timerId   = null;
-    let isPaused  = false;
+    let index = 0;
+    let timerId = null;
+    let isPaused = false;
+    let fileName = '';
+    let abbreviations = ['dr','prof','nr','ul','al','itd','itp','min','mgr','r','pp','np','vs'];
 
-    startBtn.addEventListener('click', () => {
+    function setLoading(txt){ loadingHint.textContent = txt; }
+
+    themeToggle.addEventListener('click', () => {
+      const body = document.body;
+      body.classList.toggle('dark');
+      const isDark = body.classList.contains('dark');
+      themeToggle.textContent = isDark ? 'Jasny tryb' : 'Ciemny tryb';
+      themeToggle.style.background = isDark ? '#fff' : '#222';
+      themeToggle.style.color = isDark ? '#000' : '#fff';
+    });
+
+    startBtn.addEventListener('click', async () => {
       const file = fileInput.files[0];
-      if (!file) {
-        alert('Please choose a PDF file first.');
-        return;
-      }
+      if (!file) { alert('Wybierz plik PDF.'); return; }
       resetState();
-      readPdfFile(file)
-        .then(text => {
-          sentences = splitIntoSentences(text);
-          index = 0;
-          startBtn.disabled   = true;
-          fileInput.disabled  = true;
-          speedInput.disabled = true;
-          pauseBtn.disabled   = false;
-          updateInfo();
-          displayNextSentence();
-        })
-        .catch(err => {
-          console.error(err);
-          alert('Error reading PDF. Check console for details.');
-        });
+      fileName = file.name;
+      setLoading('Parsing PDF…');
+      try {
+        const text = await readPdfFile(file);
+        sentences = splitIntoSentences(text);
+        if (!sentences.length) { display.textContent = 'Brak tekstu w dokumencie.'; setLoading('Ready'); return; }
+
+        let startNum = parseInt(startIndexInput.value,10);
+        if (isNaN(startNum) || startNum < 1) startNum = 1;
+        if (startNum > sentences.length) startNum = sentences.length;
+        index = startNum - 1;
+
+        toggleControls(true);
+        updateInfo();
+        displayNextSentence();
+        setLoading('Playing');
+      } catch (e) {
+        console.error(e);
+        alert('Błąd przetwarzania PDF. Sprawdź konsolę.');
+        setLoading('Ready');
+      }
     });
 
     pauseBtn.addEventListener('click', () => {
       clearTimeout(timerId);
       isPaused = true;
-      pauseBtn.disabled  = true;
+      pauseBtn.disabled = true;
       resumeBtn.disabled = false;
-      display.textContent += ' 〔Paused〕';
+      display.textContent = display.textContent + ' 〔Paused〕';
+      setLoading('Paused');
     });
 
     resumeBtn.addEventListener('click', () => {
+      if (!isPaused) return;
       isPaused = false;
       resumeBtn.disabled = true;
-      pauseBtn.disabled  = false;
-      display.textContent = display.textContent.replace(' 〔Paused〕', '');
+      pauseBtn.disabled = false;
+      display.textContent = display.textContent.replace(' 〔Paused〕','');
       displayNextSentence();
+      setLoading('Playing');
     });
 
-    function resetState() {
+    stopBtn.addEventListener('click', () => {
+      resetState();
+      setLoading('Ready');
+      display.textContent = 'Stopped.';
+    });
+
+    function resetState(){
       clearTimeout(timerId);
       sentences = [];
-      index     = 0;
-      isPaused  = false;
+      index = 0;
+      isPaused = false;
+      fileName = '';
       display.textContent = '';
-      infoEl.textContent  = 'Sentences: 0 | Current: 0 | Progress: 0%';
-      startBtn.disabled   = false;
-      pauseBtn.disabled   = true;
-      resumeBtn.disabled  = true;
-      fileInput.disabled  = false;
+      infoEl.textContent = 'Sentences: 0 | Current: 0';
+      timeEstEl.textContent = 'Progress: 0% | ETA: 0s';
+      progBar.style.width = '0%';
+      startBtn.disabled = false;
+      pauseBtn.disabled = true;
+      resumeBtn.disabled = true;
+      stopBtn.disabled = true;
+      fileInput.disabled = false;
       speedInput.disabled = false;
+      startIndexInput.disabled = false;
     }
 
-    async function readPdfFile(file) {
+    async function readPdfFile(file){
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       let fullText = '';
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        const strings = content.items.map(item => item.str);
-        fullText += strings.join(' ') + ' ';
+        const pageText = content.items
+          .map(item => (item.str || '').replace(/\s+/g,' '))
+          .join(' ')
+          .replace(/\s+/g,' ')
+          .trim();
+        fullText += pageText + '\n';
       }
       return fullText;
     }
 
     function splitIntoSentences(text) {
-      const regex = /[^\.!\?]+[\.!\?]+(?:["']|)?|[^\.!\?]+$/g;
-      return text.match(regex)
-        ?.map(s => s.trim())
-        .filter(s => s.length) || [];
+      try {
+        if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+          const seg = new Intl.Segmenter(undefined, { granularity: 'sentence' });
+          return Array.from(seg.segment(text), s => s.segment.trim()).filter(Boolean);
+        }
+      } catch (e) {}
+      const abbr = abbreviations.map(a => a.replace(/\./g,'\\.')).join('|');
+      const regex = new RegExp(
+        `(?<!\\b(?:${abbr}))` +
+        `([^.!?\\n]+[.!?]+)(?=[\\s"']+|$)`, 'g'
+      );
+      const matches = [...text.matchAll(regex)].map(m => m[1].trim());
+      const remainder = text.replace(regex, '').trim();
+      if (remainder) {
+        matches.push(...remainder.split(/\n+/).map(s=>s.trim()).filter(Boolean));
+      }
+      return matches.length ? matches : [text.trim()];
     }
 
-    function updateInfo() {
-      const total   = sentences.length;
-      const current = Math.min(index, total);
-      const pct     = total ? ((current / total) * 100).toFixed(1) : '0.0';
-      infoEl.textContent =
-        `Sentences: ${total} | Current: ${current} | Progress: ${pct}%`;
+    function updateInfo(){
+      const total = sentences.length;
+      const current = Math.min(Math.max(1, index), total);
+      const pct = total ? ((current / total) * 100).toFixed(1) : '0.0';
+      infoEl.textContent = `Sentences: ${total} | Current: ${current}`;
+      const eta = estimateETA();
+      timeEstEl.textContent = `Progress: ${pct}% | ETA: ${formatSeconds(eta)}`;
+      progBar.style.width = `${Math.min(100, (current / Math.max(1,total)) * 100)}%`;
+    }
+
+    function estimateETA(){
+      const baseSec = parseFloat(speedInput.value) || 1;
+      let remainingChars = 0;
+      for (let i = index; i < sentences.length; i++) remainingChars += sentences[i].length;
+      const sec = (remainingChars * baseSec / 100);
+      return Math.round(sec);
+    }
+
+    function formatSeconds(s){
+      if (!isFinite(s) || s <= 0) return '0s';
+      const h = Math.floor(s/3600); const m = Math.floor((s%3600)/60); const sec = s%60;
+      if (h) return `${h}h ${m}m`;
+      if (m) return `${m}m ${sec}s`;
+      return `${sec}s`;
     }
 
     function displayNextSentence() {
       if (isPaused) return;
-
       if (index >= sentences.length) {
-        display.textContent     = '〔End of document〕';
-        pauseBtn.disabled       = true;
-        resumeBtn.disabled      = true;
+        display.textContent = '〔End of document〕';
+        pauseBtn.disabled = true;
+        resumeBtn.disabled = true;
+        stopBtn.disabled = false;
+        setLoading('Finished');
         updateInfo();
         return;
       }
-
       display.textContent = sentences[index++];
       updateInfo();
 
       const baseSec = parseFloat(speedInput.value) || 1;
-      const delayMs = Math.max(
-        200,
-        (sentences[index - 1].length * baseSec / 100) * 1000
-      );
-
+      const delayMs = Math.max(150, Math.round((sentences[index - 1].length * baseSec / 100) * 1000));
       timerId = setTimeout(displayNextSentence, delayMs);
     }
+
+    function toggleControls(playing){
+      startBtn.disabled = playing;
+      fileInput.disabled = playing;
+      speedInput.disabled = playing;
+      startIndexInput.disabled = playing;
+      pauseBtn.disabled = !playing;
+      resumeBtn.disabled = true;
+      stopBtn.disabled = !playing;
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) {
+        return;
+      }
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (!pauseBtn.disabled) pauseBtn.click();
+        else if (!resumeBtn.disabled) resumeBtn.click();
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        if (sentences.length && index < sentences.length) {
+          clearTimeout(timerId);
+          displayNextSentence();
+        }
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        if (sentences.length) {
+          clearTimeout(timerId);
+          index = Math.max(0, index - 2);
+          displayNextSentence();
+        }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        speedInput.stepUp();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        speedInput.stepDown();
+      }
+    });
+
+    speedInput.addEventListener('change', () => {
+      if (!isPaused && timerId) {
+        clearTimeout(timerId);
+        displayNextSentence();
+      }
+    });
+
+    window.addEventListener('beforeunload', () => {
+      if (fileName && sentences.length) {
+        const key = 'psr:' + fileName;
+        localStorage.setItem(key, JSON.stringify({ index, speed: speedInput.value }));
+      }
+    });
+
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files[0];
+      if (!f) return;
+      const key = 'psr:' + f.name;
+      const saved = localStorage.getItem(key);
+      if (saved) {
+        try {
+          const obj = JSON.parse(saved);
+          if (obj && obj.index) startIndexInput.value = Math.max(1, obj.index);
+          if (obj && obj.speed) speedInput.value = obj.speed;
+        } catch {}
+      }
+    });
+
+    resetState();
+    setLoading('Ready');
   </script>
 </body>
 </html>
